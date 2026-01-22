@@ -2,7 +2,7 @@
 
 基于 [chenyme/grok2api](https://github.com/chenyme/grok2api) 的增强版本，重点补齐企业部署所需的多代理池、调用日志追踪与更健壮的配置管理能力。本仓库即为 `grok2api-pro` 的源码，默认暴露 OpenAI 兼容接口 (`/v1/*`) 与管理面板 (`/login`).
 
-## 与开源版的差异
+## 与grok2api版的差异
 
 | 能力/特性 | grok2api | grok2api-pro |
 | --- | --- | --- |
@@ -101,3 +101,4 @@ volumes:
 4. **图片/视频 403**：确认 `global.base_url` 指向能被终端访问的域名/IP，且外网能访问 `http://base_url/images/*`。
 
 更多实现细节可参考 `docs/PRO_FEATURES.md` 与 `CHANGELOG.md`。
+
