@@ -971,6 +971,12 @@
             <div class="mt-6">
               <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
                 <h4 class="text-sm font-medium text-muted-foreground">当前绑定</h4>
+                <div class="flex items-center gap-2">
+                  <input id="assignmentSearchInput" placeholder="搜索已绑定SSO(支持模糊)"
+                    class="h-8 w-52 px-2 text-xs rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                  <button onclick="applyAssignmentSearch()" class="h-8 px-3 text-xs rounded-md border border-input bg-background hover:bg-accent">搜索</button>
+                  <button onclick="clearAssignmentSearch()" class="h-8 px-3 text-xs rounded-md border border-input bg-background hover:bg-accent">清除</button>
+                </div>
               </div>
               <div id="assignmentList" class="space-y-2">
                 <div class="text-sm text-muted-foreground text-center py-4">暂无绑定</div>
@@ -1430,7 +1436,9 @@
     };
     renderLogMedia = (log) => {
       const box = $('logDetailMedia'), imgBox = $('logDetailImages'), vidBox = $('logDetailVideos');
-      if (!log || !log.success || log.model !== 'grok-imagine-0.9' || !log.media_urls || !log.media_urls.length) {
+      // Only render media for models that actually return generated media URLs.
+      const mediaModels = new Set(['grok-imagine-0.9', 'grok-3-fast']);
+      if (!log || !log.success || !mediaModels.has(log.model) || !log.media_urls || !log.media_urls.length) {
         box.classList.add('hidden');
         imgBox.innerHTML = '';
         vidBox.innerHTML = '';
@@ -1484,6 +1492,7 @@
     // === 代理管理功能 ===
     let allProxies = [], proxyAssignments = {}, allTokensForProxy = [], availableTokensForProxy = [];
     let proxyLimit = 10, assignmentLimit = 10, proxyPage = 1, assignmentPage = 1, ssoPage = 1, ssoPageSize = 10;
+    let assignmentSearch = '';
     loadProxies = async () => { try { const r = await apiRequest('/api/proxies'); if (!r) return; const d = await r.json(); if (d.success) { allProxies = d.data.proxies || []; proxyAssignments = d.data.assignments || {}; renderProxies(); renderAssignments(); updateProxyStats(); updateProxySelect(); await updateSsoSelect() } } catch (e) { console.error('加载代理失败:', e) } },
       updateProxyStats = () => { const total = allProxies.length; const healthy = allProxies.filter(p => p.healthy).length; const unhealthy = total - healthy; const assigned = Object.keys(proxyAssignments).length; $('proxyStatTotal').textContent = total; $('proxyStatHealthy').textContent = healthy; $('proxyStatUnhealthy').textContent = unhealthy; $('proxyStatAssigned').textContent = assigned },
       renderProxies = () => {
@@ -1501,7 +1510,36 @@
         $('proxyPrevBtn').disabled = page <= 1;
         $('proxyNextBtn').disabled = page >= maxPage;
       },
-      renderAssignments = () => { const container = $('assignmentList'); const entries = Object.entries(proxyAssignments); if (!entries.length) { container.innerHTML = '<div class="text-sm text-muted-foreground text-center py-4">暂无绑定</div>'; return } const list = entries.slice().reverse(); const total = list.length; const maxPage = Math.ceil(total / assignmentLimit) || 1; const page = Math.min(assignmentPage, maxPage); assignmentPage = page; const start = (page - 1) * assignmentLimit; const view = list.slice(start, start + assignmentLimit); container.innerHTML = view.map(([sso, proxy]) => { const pd = formatProxyDisplay(proxy); return `<div class="flex items-center justify-between p-2 rounded border bg-muted/30"><div class="flex-1 min-w-0"><div class="text-xs font-mono truncate" title="${sso}">${sso.substring(0, 20)}...</div><div class="text-xs text-muted-foreground break-all sm:truncate" title="${pd}">${pd}</div></div><button onclick="unassignProxy('${sso}')" class="btn-icon hover:bg-destructive/10 hover:text-destructive" title="解绑"><svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>` }).join(''); $('assignmentPageInfo').textContent = `${page}/${maxPage}`; $('assignmentPrevBtn').disabled = page <= 1; $('assignmentNextBtn').disabled = page >= maxPage; },
+      renderAssignments = () => {
+        const container = $('assignmentList');
+        const entries = Object.entries(proxyAssignments);
+        if (!entries.length) { container.innerHTML = '<div class="text-sm text-muted-foreground text-center py-4">暂无绑定</div>'; return }
+
+        const term = (assignmentSearch || '').trim().toLowerCase();
+        const list = entries.slice().reverse().filter(([sso]) => !term || String(sso).toLowerCase().includes(term));
+        const total = list.length;
+        if (!total) {
+          container.innerHTML = '<div class="text-sm text-muted-foreground text-center py-4">未找到匹配的绑定</div>';
+          $('assignmentPageInfo').textContent = '1/1';
+          $('assignmentPrevBtn').disabled = true;
+          $('assignmentNextBtn').disabled = true;
+          return;
+        }
+
+        const maxPage = Math.ceil(total / assignmentLimit) || 1;
+        const page = Math.min(assignmentPage, maxPage);
+        assignmentPage = page;
+        const start = (page - 1) * assignmentLimit;
+        const view = list.slice(start, start + assignmentLimit);
+
+        container.innerHTML = view.map(([sso, proxy]) => {
+          const pd = formatProxyDisplay(proxy);
+          return `<div class="flex items-center justify-between p-2 rounded border bg-muted/30"><div class="flex-1 min-w-0"><div class="text-xs font-mono truncate" title="${sso}">${sso.substring(0, 20)}...</div><div class="text-xs text-muted-foreground break-all sm:truncate" title="${pd}">${pd}</div></div><button onclick="unassignProxy('${sso}')" class="btn-icon hover:bg-destructive/10 hover:text-destructive" title="解绑"><svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>`;
+        }).join('');
+        $('assignmentPageInfo').textContent = `${page}/${maxPage}`;
+        $('assignmentPrevBtn').disabled = page <= 1;
+        $('assignmentNextBtn').disabled = page >= maxPage;
+      },
       updateProxySelect = () => { const select = $('assignProxySelect'); select.innerHTML = '<option value="">请选择代理</option>' + allProxies.map(p => `<option value="${p.url}">${formatProxyDisplay(p.url)}</option>`).join('') },
       updateSsoSelect = async () => { 
         try { 
@@ -1531,6 +1569,8 @@
       proxyNextPage = () => { proxyPage++; renderProxies() },
       assignmentPrevPage = () => { if (assignmentPage > 1) { assignmentPage--; renderAssignments() } },
       assignmentNextPage = () => { assignmentPage++; renderAssignments() },
+      applyAssignmentSearch = () => { const el = $('assignmentSearchInput'); assignmentSearch = (el && el.value) ? el.value : ''; assignmentPage = 1; renderAssignments() },
+      clearAssignmentSearch = () => { const el = $('assignmentSearchInput'); if (el) el.value = ''; assignmentSearch = ''; assignmentPage = 1; renderAssignments() },
       renderSsoOptions = () => {
         const container = $('assignSsoList');
         if (!availableTokensForProxy.length) {
@@ -1557,6 +1597,13 @@
       clearSsoOptions = () => { document.querySelectorAll('#assignSsoList .sso-checkbox').forEach(cb => cb.checked = false) },
       getSelectedSso = () => Array.from(document.querySelectorAll('#assignSsoList .sso-checkbox:checked')).map(cb => cb.value),
       unassignProxy = async (sso) => { if (!confirm('确定要解除这个绑定吗？')) return; try { const r = await apiRequest('/api/proxies/unassign', { method: 'POST', body: JSON.stringify({ sso }) }); if (!r) return; const d = await r.json(); d.success ? (showToast('已解绑', 'success'), loadProxies()) : showToast(extractErrorMessage(d, '解绑失败'), 'error') } catch (e) { showToast('解绑失败: ' + e.message, 'error') } };
+
+    // Search shortcut: press Enter in "当前绑定" search box.
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = $('assignmentSearchInput');
+      if (!el) return;
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter') applyAssignmentSearch(); });
+    });
 
     const setDefaultLogRange = () => {
       const startInput = $('logFilterStart'), endInput = $('logFilterEnd');
