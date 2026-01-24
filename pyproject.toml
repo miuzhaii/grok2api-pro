@@ -1,7 +1,7 @@
 [project]
 name = "grok2api"
 version = "1.4.3"
-description = "基于 FastAPI 重构的 Grok2API，适配最新的Web调用格式，支持流式对话、图像生成、图像编辑、联网搜索、视频生成、深度思考，支持号池并发调用和自动负载均衡。"
+description = "Grok2API（OpenAI 兼容接口）— 基于 FastAPI 的 Grok Web 转发/适配服务：支持流式对话、图片/视频生成与缓存、代理池与 SSO 绑定、号池并发与自动负载均衡。"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

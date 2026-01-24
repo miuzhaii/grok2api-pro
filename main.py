@@ -131,7 +131,7 @@ logger.info("[Grok2API] 应用正在启动...")
 # 创建FastAPI应用
 app = FastAPI(
     title="Grok2API",
-    description="Grok API 转换服务",
+    description="Grok2API（OpenAI 兼容接口）：将 Grok Web 调用适配为 OpenAI 风格 API，支持流式对话、图片/视频生成与缓存、代理池与 SSO 绑定、号池并发与自动负载均衡。",
     version="1.3.1",
     lifespan=lifespan
 )
