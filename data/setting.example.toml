@@ -14,6 +14,8 @@ dynamic_statsig = true
 proxy_pool_url = ""
 proxy_pool_interval = 300
 retry_status_codes = [401, 429]
+# curl_cffi 偶发 TLS 握手错误（curl:35 / OPENSSL_internal 等）最大重试次数
+max_tls_retries = 2
 
 [global]
 base_url = "http://127.0.0.1:8001"

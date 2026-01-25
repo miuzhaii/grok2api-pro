@@ -68,6 +68,7 @@
   - `proxy_pool_url` + `proxy_pool_interval`：从远程接口周期获取代理；
   - `filtered_tags`、`show_thinking`、`temporary` 等 Grok 调用行为控制；
   - `retry_status_codes`：允许自动重试的 HTTP 状态码（Pro 默认为 `[401,429]`）。
+  - `max_tls_retries`：`curl_cffi` 偶发 TLS 握手错误（如 `curl: (35)`）的最大重试次数（默认 `2`）。
 - `[global]` 节：
   - `admin_username` / `admin_password`：后台账号；
   - `base_url`：用于生成图片/视频回调的公网地址；

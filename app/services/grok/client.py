@@ -31,6 +31,12 @@ class GrokClient:
     """Grok API 客户端"""
     
     _upload_sem = None  # 延迟初始化
+    _TLS_ERROR_HINTS = (
+        "TLS connect error",
+        "curl: (35)",
+        "OPENSSL_internal",
+        "invalid library",
+    )
 
     @staticmethod
     def _get_upload_semaphore():
@@ -266,17 +272,21 @@ class GrokClient:
         if not token:
             raise GrokApiException("认证令牌缺失", "NO_AUTH_TOKEN")
         sso_token = token_manager._extract_sso(token) or ""
+        from app.core.proxy_pool import proxy_pool
 
         # 外层重试：可配置状态码（401/429等）
         retry_codes = setting.grok_config.get("retry_status_codes", [401, 429])
         MAX_OUTER_RETRY = 3
+        MAX_TLS_RETRY = int(setting.grok_config.get("max_tls_retries", 2))
         
         for outer_retry in range(MAX_OUTER_RETRY + 1):  # +1确保实际重试3次
             # 内层重试：403代理池重试
             max_403_retries = 5
             retry_403_count = 0
+            tls_retry_count = 0
             
             while retry_403_count <= max_403_retries:
+                proxy = None
                 try:
                     # 构建请求
                     headers = GrokClient._build_headers(token)
@@ -287,8 +297,6 @@ class GrokClient:
                             headers["Referer"] = f"https://grok.com/imagine/{ref_id}"
                     
                     # 异步获取代理
-                    from app.core.proxy_pool import proxy_pool
-                    
                     # 如果是403重试且使用代理池，强制刷新代理
                     if retry_403_count > 0 and proxy_pool._enabled:
                         logger.info(f"[Client] 403重试 {retry_403_count}/{max_403_retries}，刷新代理...")
@@ -357,7 +365,26 @@ class GrokClient:
                     return result
                     
                 except curl_requests.RequestsError as e:
-                    logger.error(f"[Client] 网络错误: {e}")
+                    err_text = str(e)
+                    is_tls = any(hint in err_text for hint in GrokClient._TLS_ERROR_HINTS)
+                    if is_tls and tls_retry_count < MAX_TLS_RETRY:
+                        tls_retry_count += 1
+                        if proxy:
+                            try:
+                                proxy_pool.mark_failure(proxy)
+                            except Exception:
+                                pass
+                        logger.warning(
+                            f"[Client] TLS/握手瞬断，重试 {tls_retry_count}/{MAX_TLS_RETRY} "
+                            f"(outer={outer_retry}/{MAX_OUTER_RETRY}, 403_retry={retry_403_count}/{max_403_retries}, proxy={'on' if proxy else 'off'}): {e}"
+                        )
+                        await asyncio.sleep(0.4 * tls_retry_count)
+                        continue
+
+                    logger.error(
+                        f"[Client] 网络错误(outer={outer_retry}/{MAX_OUTER_RETRY}, 403_retry={retry_403_count}/{max_403_retries}, "
+                        f"tls_retry={tls_retry_count}/{MAX_TLS_RETRY}, proxy={'on' if proxy else 'off'}): {e}"
+                    )
                     raise GrokApiException(f"网络错误: {e}", "NETWORK_ERROR") from e
                 except GrokApiException:
                     # 重新抛出GrokApiException（包括403错误）
